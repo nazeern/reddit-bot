@@ -1,2 +1,4 @@
 conf.toml
 .venv
+tts_audio/*
+!tts_audio/.gitkeep
