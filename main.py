@@ -1,8 +1,11 @@
 from google.cloud import texttospeech
 from itertools import islice
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 import praw
 
-TTS_ENABLED=False
+from tts import TTS
+
+REDDIT_URL="https://www.reddit.com"
 
 # Capture top Reddit submission's title and text, and the top N comments
 reddit = praw.Reddit(
@@ -10,46 +13,61 @@ reddit = praw.Reddit(
     client_secret="iCnan1uRpuo5OGA8RD20E6PSc56Y1g",
     user_agent="shorts-bot",
 )
+tts = TTS()
+tts.disabled = True
 
-subreddit_name = "todayilearned"
+subreddit_name = "wallstreetbets"
 submissions = reddit.subreddit(subreddit_name).top(time_filter="day")
 top_submission = next(s for s in submissions if not s.stickied)
-print(top_submission.title)
-print(top_submission.selftext)
-
-top_submission.comment_sort = "top"
-for comment in islice((x for x in top_submission.comments if not x.stickied), 3):
-    print(comment.body)
-
-    replies = comment.replies[:1]
-    for i, reply in enumerate(replies):
-        print(f"Reply {i}:\n", reply.body)
+tts.save_tts(
+    top_submission.title + ". " + top_submission.selftext,
+    "tts_audio/clip0.mp3",
+)
 
 # Capture screenshots of the Reddit data gathered
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=False)
+    page = browser.new_page(color_scheme="dark")
+    page.set_viewport_size({"width": 900, "height": 1600})
 
+    page.goto(REDDIT_URL + top_submission.permalink + "?sort=top")
+    page.wait_for_load_state("networkidle")
 
-# Turn this Reddit information into audio clips using Google Cloud TTS
-if TTS_ENABLED:
+    page.locator(f"#t3_{top_submission.id}").screenshot(path="screenshots/img0.png")
 
-    client = texttospeech.TextToSpeechClient()
+    top_submission.comment_sort = "top"
+    i = 1
+    for comment in islice((x for x in top_submission.comments if not x.stickied), 3):
+        print(comment.body)
+        tts.save_tts(comment.body, f"tts_audio/clip{i}.mp3")
 
-    synthesis_input = texttospeech.SynthesisInput(text=top_submission.title)
+        comment_locator = page.locator(f'[thingid=t1_{comment.id}]')
+        comment_locator.scroll_into_view_if_needed()
 
-    voice = texttospeech.VoiceSelectionParams(
-        language_code="en-au",
-        name="en-AU-Polyglot-1",
-    )
+        comment_bbox = comment_locator.bounding_box()
+        next_reply_ypos = page.locator(f"#t1_{comment.id}-next-reply").bounding_box()["y"]
+        page.screenshot(
+            path=f"screenshots/img{i}.png",
+            clip={**comment_bbox, "height": next_reply_ypos - comment_bbox["y"]}
+        )
+        i += 1
 
-    audio_config = texttospeech.AudioConfig(
-        audio_encoding=texttospeech.AudioEncoding.MP3,
-        effects_profile_id=["handset-class-device"]
-    )
+        # Screenshot & TTS for reply
+        reply = comment.replies[0] if comment.replies else None
+        print(f"Reply {i}:\n", reply.body)
+        tts.save_tts(reply.body, f"tts_audio/clip{i}.mp3")
 
-    response = client.synthesize_speech(
-        input=synthesis_input, voice=voice, audio_config=audio_config
-    )
+        try:
+            next_reply_ypos = page.locator(f'#t1_{reply.id}-next-reply').bounding_box(timeout=1000)["y"]
+        except PlaywrightTimeoutError:
+            page.locator(f"faceplate-partial[slot=children-t1_{comment.id}-0]").click()
+            next_reply_ypos = page.locator(f'#t1_{reply.id}-next-reply').bounding_box()["y"]
+        page.screenshot(
+            path=f"screenshots/img{i}.png",
+            clip={**comment_bbox, "height": next_reply_ypos - comment_bbox["y"]},
+        )
+        i += 1
 
-    with open("tts_audio/clip0.mp3", "wb") as out:
-        out.write(response.audio_content)
-        print('Audio content written to file "output.mp3"')
+    
+    browser.close()
 

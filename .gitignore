@@ -2,3 +2,6 @@ conf.toml
 .venv
 tts_audio/*
 !tts_audio/.gitkeep
+screenshots/*
+!screenshots/.gitkeep
+__pycache__/
