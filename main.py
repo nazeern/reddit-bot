@@ -1,4 +1,3 @@
-from google.cloud import texttospeech
 from itertools import islice
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 import praw
