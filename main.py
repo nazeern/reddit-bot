@@ -2,16 +2,21 @@ from google.cloud import texttospeech
 from itertools import islice
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 import praw
+import tomli
 
 from tts import TTS
+
+with open("conf.toml", "rb") as f:
+    config = tomli.load(f)
+env = config["env"]
 
 REDDIT_URL="https://www.reddit.com"
 
 # Capture top Reddit submission's title and text, and the top N comments
 reddit = praw.Reddit(
-    client_id="cRGrLMWPbuzyxJ45uu8tnw",
-    client_secret="iCnan1uRpuo5OGA8RD20E6PSc56Y1g",
-    user_agent="shorts-bot",
+    client_id=env["REDDIT_CLIENT_ID"],
+    client_secret=env["REDDIT_CLIENT_SECRET"],
+    user_agent=env["REDDIT_USER_AGENT"],
 )
 tts = TTS()
 tts.disabled = True
@@ -19,6 +24,7 @@ tts.disabled = True
 subreddit_name = "wallstreetbets"
 submissions = reddit.subreddit(subreddit_name).top(time_filter="day")
 top_submission = next(s for s in submissions if not s.stickied)
+
 tts.save_tts(
     top_submission.title + ". " + top_submission.selftext,
     "tts_audio/clip0.mp3",
