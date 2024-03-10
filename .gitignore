@@ -1,7 +1,6 @@
 conf.toml
 .venv
-tts_audio/*
-!tts_audio/.gitkeep
-screenshots/*
-!screenshots/.gitkeep
+assets/*
+!assets/.gitkeep
 __pycache__/
+output.mp4
